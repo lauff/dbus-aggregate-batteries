@@ -621,7 +621,7 @@ class DbusAggBatService(object):
                 )
 
                 if not settings.OWN_SOC:
-                    if settings.BATTERIES_IN_PARALLEL:
+                    if not settings.BATTERIES_IN_SERIES:
                         ConsumedAmphours += self._dbusMon.dbusmon.get_value(
                             self._batteries_dict[i], "/ConsumedAmphours"
                         )
@@ -875,7 +875,7 @@ class DbusAggBatService(object):
         VoltagesSum = (
             sum(VoltagesSum_dict.values())
         )  # Marvo2011
-        if settings.BATTERIES_IN_PARALLEL:
+        if not settings.BATTERIES_IN_SERIES:
             VoltagesSum = VoltagesSum / settings.NR_OF_BATTERIES
 
         # find max and min cell temperature (have no ID)
@@ -905,21 +905,21 @@ class DbusAggBatService(object):
             else:
                 MaxChargeVoltage = self._fn._min(MaxChargeVoltage_list)
             
-            if not settings.BATTERIES_IN_PARALLEL:
+            if settings.BATTERIES_IN_SERIES:
                 MaxChargeVoltage = MaxChargeVoltage * settings.NR_OF_BATTERIES
                 
             MaxChargeCurrent = (
                 self._fn._min(MaxChargeCurrent_list)
             )
             
-            if settings.BATTERIES_IN_PARALLEL:
+            if not settings.BATTERIES_IN_SERIES:
                 MaxChargeCurrent = MaxChargeCurrent * settings.NR_OF_BATTERIES
             
             MaxDischargeCurrent = (
                 self._fn._min(MaxDischargeCurrent_list)
             )
             
-            if settings.BATTERIES_IN_PARALLEL:
+            if not settings.BATTERIES_IN_SERIES:
                 MaxDischargeCurrent = MaxDischargeCurrent * settings.NR_OF_BATTERIES
 
         # FIXME: is this correct? can't be some batteries in allowed and others in not allowed state?
@@ -973,7 +973,7 @@ class DbusAggBatService(object):
         ####################################################################################################
 
         # FIXME: calculate OWN_CHARGE_PARAMETERS for batteries in series
-        if (settings.OWN_CHARGE_PARAMETERS) and (not settings.BATTERIES_IN_PARALLEL):
+        if (settings.OWN_CHARGE_PARAMETERS) and (settings.BATTERIES_IN_SERIES):
                 logging.error(
                     "OWN_CHARGE_PARAMETERS is not handled for batteries in series"
                 )
@@ -1150,7 +1150,7 @@ class DbusAggBatService(object):
         else:
             if settings.OWN_SOC:
                 # FIXME: calculate for batteries in series
-                if (not settings.BATTERIES_IN_PARALLEL):
+                if (settings.BATTERIES_IN_SERIES):
                     logging.warning(
                         "not clear whether OWN_SOC works for batteries in series"
                     )
