@@ -106,6 +106,7 @@ class DbusAggBatService(object):
                 )  # read
                 self._lastBalancing = int(self._lastBalancing_file.readline().strip())
                 self._lastBalancing_file.close()
+                # FIXME: this does not work if lastBalancing is older than one year
                 time_unbalanced = (
                     int((dt.now()).strftime("%j")) - self._lastBalancing
                 )  # in days
@@ -131,6 +132,7 @@ class DbusAggBatService(object):
         # Create the mandatory objects
         self._dbusservice.add_path("/DeviceInstance", 99)
         # this product ID was randomly selected - please exchange, if interference with another component
+        # FIXME: check if this is really OK - or make it configurable
         self._dbusservice.add_path("/ProductId", 0xBA44)
         self._dbusservice.add_path("/ProductName", "AggregateBatteries")
         self._dbusservice.add_path("/FirmwareVersion", VERSION)
@@ -619,9 +621,14 @@ class DbusAggBatService(object):
                 )
 
                 if not settings.OWN_SOC:
-                    ConsumedAmphours += self._dbusMon.dbusmon.get_value(
-                        self._batteries_dict[i], "/ConsumedAmphours"
-                    )
+                    if settings.BATTERIES_IN_PARALLEL:
+                        ConsumedAmphours += self._dbusMon.dbusmon.get_value(
+                            self._batteries_dict[i], "/ConsumedAmphours"
+                        )
+                    else:
+                        # FIXME: calculate ConsumedAmphours as the average of all batteries
+                        logging.warning("ConsumedAmphours calculation for series connection of batteries not implemented yet.")
+                        ConsumedAmphours = 0
                     Capacity += self._dbusMon.dbusmon.get_value(
                         self._batteries_dict[i], "/Capacity"
                     )
@@ -633,6 +640,7 @@ class DbusAggBatService(object):
                     ttg = self._dbusMon.dbusmon.get_value(
                         self._batteries_dict[i], "/TimeToGo"
                     )
+                    # FIXME: check whether TimeToGo for batteries in series is correct (the same as in parallel?)
                     if (ttg is not None) and (TimeToGo is not None):
                         TimeToGo += ttg * self._dbusMon.dbusmon.get_value(
                             self._batteries_dict[i], "/InstalledCapacity"
@@ -865,8 +873,10 @@ class DbusAggBatService(object):
         Voltage = Voltage / settings.NR_OF_BATTERIES
         Temperature = Temperature / settings.NR_OF_BATTERIES
         VoltagesSum = (
-            sum(VoltagesSum_dict.values()) / settings.NR_OF_BATTERIES
+            sum(VoltagesSum_dict.values())
         )  # Marvo2011
+        if settings.BATTERIES_IN_PARALLEL:
+            VoltagesSum = VoltagesSum / settings.NR_OF_BATTERIES
 
         # find max and min cell temperature (have no ID)
         MaxCellTemp = self._fn._max(MaxCellTemp_list)
@@ -894,15 +904,25 @@ class DbusAggBatService(object):
                     
             else:
                 MaxChargeVoltage = self._fn._min(MaxChargeVoltage_list)
+            
+            if not settings.BATTERIES_IN_PARALLEL:
+                MaxChargeVoltage = MaxChargeVoltage * settings.NR_OF_BATTERIES
                 
             MaxChargeCurrent = (
-                self._fn._min(MaxChargeCurrent_list) * settings.NR_OF_BATTERIES
+                self._fn._min(MaxChargeCurrent_list)
             )
             
+            if settings.BATTERIES_IN_PARALLEL:
+                MaxChargeCurrent = MaxChargeCurrent * settings.NR_OF_BATTERIES
+            
             MaxDischargeCurrent = (
-                self._fn._min(MaxDischargeCurrent_list) * settings.NR_OF_BATTERIES
+                self._fn._min(MaxDischargeCurrent_list)
             )
+            
+            if settings.BATTERIES_IN_PARALLEL:
+                MaxDischargeCurrent = MaxDischargeCurrent * settings.NR_OF_BATTERIES
 
+        # FIXME: is this correct? can't be some batteries in allowed and others in not allowed state?
         AllowToCharge = self._fn._min(AllowToCharge_list)
         AllowToDischarge = self._fn._min(AllowToDischarge_list)
         AllowToBalance = self._fn._min(AllowToBalance_list)
@@ -951,6 +971,14 @@ class DbusAggBatService(object):
         ####################################################################################################
         # Calculate own charge/discharge parameters (overwrite the values received from the SerialBattery) #
         ####################################################################################################
+
+        # FIXME: calculate OWN_CHARGE_PARAMETERS for batteries in series
+        if (settings.OWN_CHARGE_PARAMETERS) and (not settings.BATTERIES_IN_PARALLEL):
+                logging.error(
+                    "OWN_CHARGE_PARAMETERS is not handled for batteries in series"
+                )
+                sys.exit()
+
 
         if settings.OWN_CHARGE_PARAMETERS:
             CVL_NORMAL = (
@@ -1121,6 +1149,11 @@ class DbusAggBatService(object):
         # SoC resetting if OWN_SOC = True and OWN_CHARGE_PARAMETERS = False
         else:
             if settings.OWN_SOC:
+                # FIXME: calculate for batteries in series
+                if (not settings.BATTERIES_IN_PARALLEL):
+                    logging.warning(
+                        "not clear whether OWN_SOC works for batteries in series"
+                    )
                 if (MaxCellVoltage >= settings.MAX_CELL_VOLTAGE_SOC_FULL):
                     self._ownCharge = InstalledCapacity  # reset Coulumb counter to 100%
                 if (MinCellVoltage <= settings.MIN_CELL_VOLTAGE_SOC_EMPTY) and settings.ZERO_SOC:
@@ -1251,6 +1284,7 @@ class DbusAggBatService(object):
             """
 
             # this does not control the charger, is only displayed in GUI
+            # FIXME: this is (at least) misleading in case of different values in batteries
             bus["/Io/AllowToCharge"] = AllowToCharge
             bus["/Io/AllowToDischarge"] = AllowToDischarge
             bus["/Io/AllowToBalance"] = AllowToBalance

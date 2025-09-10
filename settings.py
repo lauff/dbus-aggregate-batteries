@@ -6,6 +6,9 @@
 NR_OF_BATTERIES = 2
 NR_OF_CELLS_PER_BATTERY = 24
 
+# True: Batteries are connected in parallel, False: in series (adding voltages)
+BATTERIES_IN_PARALLEL = True  
+
 # Nr. of MPPTs
 NR_OF_MPPTS = 1
 
