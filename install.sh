@@ -20,6 +20,15 @@ elif [ -f "/data/dbus-aggregate-batteries/settings.py" ]; then
     cp /data/dbus-aggregate-batteries/settings.py /data/dbus-aggregate-batteries_settings.py.backup
 fi
 
+# backup charge file
+if [ -f "/data/apps/dbus-aggregate-batteries/charge" ]; then
+    cp /data/apps/dbus-aggregate-batteries/charge /data/dbus-aggregate-charge.backup
+elif [ -f "/data/dbus-aggregate-batteries/charge" ]; then
+	# legacy installation folder
+    cp /data/dbus-aggregate-batteries/charge /data/dbus-aggregate-batteries_charge.backup
+fi
+
+
 # download driver
 cd /tmp
 wget -O dbus-aggregate-batteries_latest.zip https://github.com/Dr-Gigavolt/dbus-aggregate-batteries/archive/refs/tags/$latest_release.zip
@@ -49,11 +58,26 @@ mv /tmp/dbus-aggregate-batteries-$latest_release /data/apps/dbus-aggregate-batte
 
 # restore settings.py
 if [ -f "/data/dbus-aggregate-batteries_settings.py.backup" ]; then
-    # rename settings.py
-    mv /data/apps/dbus-aggregate-batteries/settings.py /data/apps/dbus-aggregate-batteries/settings.new-version.py
-    # restore settings.py
     echo "Restore settings.py"
     mv /data/dbus-aggregate-batteries_settings.py.backup /data/apps/dbus-aggregate-batteries/settings.py
+fi
+
+# restore charge file
+if [ -f "/data/dbus-aggregate-batteries_charge.backup" ]; then
+    echo "Restore charge file"
+    mv /data/dbus-aggregate-batteries_charge.backup /data/apps/dbus-aggregate-batteries/charge
+fi
+
+# initialize settings.py and charge file if not present
+
+if ! [ -f "/data/apps/dbus-aggregate-batteries/settings.py" ]; then
+    echo "A backup of settings.py was not found. A new settings.py has been created from example file."
+    cp /data/apps/dbus-aggregate-batteries/settings.example.py /data/apps/dbus-aggregate-batteries/settings.py
+fi
+
+if ! [ -f "/data/apps/dbus-aggregate-batteries/charge" ]; then
+    echo "A backup of charge file was not found. A new charge file has been created from example file."
+    cp /data/apps/dbus-aggregate-batteries/charge.example /data/apps/dbus-aggregate-batteries/charge
 fi
 
 # start reinstall-local.sh
