@@ -539,11 +539,17 @@ class DbusAggBatService(object):
         Power = 0
 
         # Capacity
-        Soc = 0
-        Capacity = 0
         InstalledCapacity = 0
         ConsumedAmphours = 0
-        TimeToGo = 0
+        
+        if settings.BATTERIES_IN_SERIES:
+            Capacity = float('inf')  # start with a very high value, to find the minimum
+            Soc = float('inf')
+            TimeToGo = float('inf')
+        else:
+            Capacity = 0
+            Soc = 0
+            TimeToGo = 0
 
         # Temperature
         Temperature = 0
@@ -601,7 +607,7 @@ class DbusAggBatService(object):
 
         try:
             for i in self._batteries_dict:  # Marvo2011
-
+                
                 # DC
                 step = "Read V, I, P"  # to detect error
                 Voltage += self._dbusMon.dbusmon.get_value(
@@ -621,30 +627,43 @@ class DbusAggBatService(object):
                 )
 
                 if not settings.OWN_SOC:
-                    if not settings.BATTERIES_IN_SERIES:
-                        ConsumedAmphours += self._dbusMon.dbusmon.get_value(
-                            self._batteries_dict[i], "/ConsumedAmphours"
-                        )
+                    ConsumedAmphours += self._dbusMon.dbusmon.get_value(
+                        self._batteries_dict[i], "/ConsumedAmphours"
+                    )
+                    
+                    if settings.BATTERIES_IN_SERIES:
+                        Capacity = min(Capacity, self._dbusMon.dbusmon.get_value(
+                            self._batteries_dict[i], "/Capacity"
+                        ))
                     else:
-                        # FIXME: calculate ConsumedAmphours as the average of all batteries
-                        logging.warning("ConsumedAmphours calculation for series connection of batteries not implemented yet.")
-                        ConsumedAmphours = 0
-                    Capacity += self._dbusMon.dbusmon.get_value(
-                        self._batteries_dict[i], "/Capacity"
-                    )
-                    Soc += self._dbusMon.dbusmon.get_value(
-                        self._batteries_dict[i], "/Soc"
-                    ) * self._dbusMon.dbusmon.get_value(
-                        self._batteries_dict[i], "/InstalledCapacity"
-                    )
+                        Capacity += self._dbusMon.dbusmon.get_value(
+                            self._batteries_dict[i], "/Capacity"
+                        )
+                    
+                    if settings.BATTERIES_IN_SERIES:
+                        Soc = min(Soc, self._dbusMon.dbusmon.get_value(
+                            self._batteries_dict[i], "/Soc"
+                        ))
+                    else:
+                        Soc += self._dbusMon.dbusmon.get_value(
+                            self._batteries_dict[i], "/Soc"
+                        ) * self._dbusMon.dbusmon.get_value(
+                            self._batteries_dict[i], "/InstalledCapacity"
+                        )
+                    
                     ttg = self._dbusMon.dbusmon.get_value(
                         self._batteries_dict[i], "/TimeToGo"
                     )
-                    # FIXME: check whether TimeToGo for batteries in series is correct (the same as in parallel?)
+
                     if (ttg is not None) and (TimeToGo is not None):
-                        TimeToGo += ttg * self._dbusMon.dbusmon.get_value(
-                            self._batteries_dict[i], "/InstalledCapacity"
-                        )
+                        if settings.BATTERIES_IN_SERIES:
+                            TimeToGo = min(TimeToGo, ttg* self._dbusMon.dbusmon.get_value(
+                                self._batteries_dict[i], "/InstalledCapacity"
+                            ))
+                        else:
+                            TimeToGo += ttg * self._dbusMon.dbusmon.get_value(
+                                self._batteries_dict[i], "/InstalledCapacity"
+                            )
                     else:
                         TimeToGo = None
 
@@ -868,15 +887,38 @@ class DbusAggBatService(object):
         #####################################################
         # Process collected values (except of dictionaries) #
         #####################################################
-
-        # averaging
-        Voltage = Voltage / settings.NR_OF_BATTERIES
+        
+        # Temperature
+        
         Temperature = Temperature / settings.NR_OF_BATTERIES
+        
+        # Current
+        
+        if settings.BATTERIES_IN_SERIES:
+            Current = Current / settings.NR_OF_BATTERIES
+
+        # Voltage
+        
+        if not settings.BATTERIES_IN_SERIES:
+            Voltage = Voltage / settings.NR_OF_BATTERIES
+        
+        # VoltageSum
+        
         VoltagesSum = (
             sum(VoltagesSum_dict.values())
         )  # Marvo2011
         if not settings.BATTERIES_IN_SERIES:
             VoltagesSum = VoltagesSum / settings.NR_OF_BATTERIES
+
+        # ConsumedAmphours
+
+        if settings.BATTERIES_IN_SERIES:
+            ConsumedAmphours = ConsumedAmphours / settings.NR_OF_BATTERIES
+            
+        # InstalledCapacity (using average, wheras Capacity uses the min of capacities)
+        
+        if settings.BATTERIES_IN_SERIES:
+            InstalledCapacity = InstalledCapacity / settings.NR_OF_BATTERIES
 
         # find max and min cell temperature (have no ID)
         MaxCellTemp = self._fn._max(MaxCellTemp_list)
@@ -1198,7 +1240,8 @@ class DbusAggBatService(object):
             else:
                 TimeToGo = None
         else:
-            Soc = Soc / InstalledCapacity  # weighted sum
+            if not settings.BATTERIES_IN_SERIES:
+                Soc = Soc / InstalledCapacity  # weighted sum
             if TimeToGo is not None:
                 TimeToGo = TimeToGo / InstalledCapacity  # weighted sum
 
